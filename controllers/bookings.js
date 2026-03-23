@@ -72,6 +72,8 @@ exports.getBooking = async (req, res, next) => {
 //@desc    Add booking
 //@route   POST /api/v1/hotels/:hotelId/bookings
 //@access  Private
+// controllers/bookings.js
+
 exports.addBooking = async (req, res, next) => {
     try {
         req.body.hotel = req.params.hotelId;
@@ -85,31 +87,16 @@ exports.addBooking = async (req, res, next) => {
             });
         }
 
-        // Validate startDate and endDate are present
-        const { startDate, endDate } = req.body;
+        // Assign the names from the fetched hotel and the logged-in user
+        req.body.hotelName = hotel.name; // From Hotel model
 
-        if (!startDate || !endDate) {
-            return res.status(400).json({
-                success: false,
-                message: 'Please provide both startDate and endDate'
-            });
-        }
+        // ... existing validation logic ...
 
-        // Validate endDate is the same as or after startDate
-        if (new Date(endDate) < new Date(startDate)) {
-            return res.status(400).json({
-                success: false,
-                message: 'End date must be the same as or after start date'
-            });
-        }
-
-        // Add user Id to req.body
         req.body.user = req.user.id;
 
-        // Check for existed bookings
+        // Check for existing bookings
         const existedBookings = await Booking.find({ user: req.user.id });
 
-        // If the user is not an admin, they can only create 3 bookings.
         if (existedBookings.length >= 3 && req.user.role !== 'admin') {
             return res.status(400).json({
                 success: false,

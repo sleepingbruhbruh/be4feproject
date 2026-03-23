@@ -25,6 +25,11 @@ const BookingSchema = new mongoose.Schema({
         ref: 'Hotel',
         required: true
     },
+    // Added hotelName field
+    hotelName: {
+        type: String,
+        required: [true, 'Please add a hotel name']
+    },
     createdAt: {
         type: Date,
         default: Date.now
@@ -32,4 +37,3 @@ const BookingSchema = new mongoose.Schema({
 });
  
 module.exports = mongoose.model('Booking', BookingSchema);
- 
