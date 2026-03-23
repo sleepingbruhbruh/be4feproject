@@ -6,25 +6,21 @@ const Hotel = require('../models/Hotel');
 //@access   Public
 exports.getBookings = async (req, res, next) => {
     let query;
-    // General users can see only their bookings!
+
     if (req.user.role !== 'admin') {
-        query = Booking.find({ user: req.user.id }).populate({
-            path: 'hotel',
-            select: 'name address tel'
-        });
+        query = Booking.find({ user: req.user.id })
+            .populate({ path: 'hotel', select: 'name address tel' })
+            .populate({ path: 'user', select: 'name email tel' });
     } else {
-        // If you are an admin, you can see all bookings!
         if (req.params.hotelId) {
             console.log(req.params.hotelId);
-            query = Booking.find({ hotel: req.params.hotelId }).populate({
-                path: 'hotel',
-                select: 'name address tel'
-            });
+            query = Booking.find({ hotel: req.params.hotelId })
+                .populate({ path: 'hotel', select: 'name address tel' })
+                .populate({ path: 'user', select: 'name email tel' });
         } else {
-            query = Booking.find().populate({
-                path: 'hotel',
-                select: 'name address tel'
-            });
+            query = Booking.find()
+                .populate({ path: 'hotel', select: 'name address tel' })
+                .populate({ path: 'user', select: 'name email tel' });  // ← add this
         }
     }
 
@@ -87,9 +83,6 @@ exports.addBooking = async (req, res, next) => {
             });
         }
 
-        // Assign the names from the fetched hotel and the logged-in user
-        req.body.hotelName = hotel.name; // From Hotel model
-
         // ... existing validation logic ...
 
         req.body.user = req.user.id;
@@ -100,7 +93,7 @@ exports.addBooking = async (req, res, next) => {
         if (existedBookings.length >= 3 && req.user.role !== 'admin') {
             return res.status(400).json({
                 success: false,
-                message: `The user with ID ${req.user.id} has already made 3 bookings`
+                message: `User has already made 3 bookings`
             });
         }
 
