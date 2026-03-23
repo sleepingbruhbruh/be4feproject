@@ -1,0 +1,889 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+config/
+  db.js
+controllers/
+  auth.js
+  bookings.js
+  hotels.js
+middleware/
+  auth.js
+models/
+  Booking.js
+  Hotel.js
+  User.js
+routes/
+  auth.js
+  bookings.js
+  hotels.js
+.gitignore
+package.json
+README.md
+server.js
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="config/db.js">
+const mongoose = require('mongoose');
+
+const connectDB = async () => {
+    mongoose.set('strictQuery',true);
+    const conn = await mongoose.connect(process.env.MONGO_URI);
+    
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
+}
+
+module.exports = connectDB;
+</file>
+
+<file path="controllers/bookings.js">
+const Booking = require('../models/Booking');
+const Hotel = require('../models/Hotel');
+
+//@desc     Get all bookings
+//@route    GET /api/v1/bookings
+//@access   Public
+exports.getBookings = async (req, res, next) => {
+    let query;
+    // General users can see only their bookings!
+    if (req.user.role !== 'admin') {
+        query = Booking.find({ user: req.user.id }).populate({
+            path: 'hotel',
+            select: 'name address tel'
+        });
+    } else {
+        // If you are an admin, you can see all bookings!
+        if (req.params.hotelId) {
+            console.log(req.params.hotelId);
+            query = Booking.find({ hotel: req.params.hotelId }).populate({
+                path: 'hotel',
+                select: 'name address tel'
+            });
+        } else {
+            query = Booking.find().populate({
+                path: 'hotel',
+                select: 'name address tel'
+            });
+        }
+    }
+
+    try {
+        const bookings = await query;
+
+        res.status(200).json({
+            success: true,
+            count: bookings.length,
+            data: bookings
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({ success: false, message: "Cannot find Booking" });
+    }
+};
+
+exports.getBooking = async (req, res, next) => {
+    try {
+        const booking = await Booking.findById(req.params.id).populate({
+            path: 'hotel',
+            select: 'name address tel'
+        });
+
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: `No booking with the id of ${req.params.id}`
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            data: booking
+        });
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Cannot find Booking"
+        });
+    }
+};
+
+//@desc    Add booking
+//@route   POST /api/v1/hotels/:hotelId/bookings
+//@access  Private
+exports.addBooking = async (req, res, next) => {
+    try {
+        req.body.hotel = req.params.hotelId;
+
+        const hotel = await Hotel.findById(req.params.hotelId);
+
+        if (!hotel) {
+            return res.status(404).json({
+                success: false,
+                message: `No hotel with the id of ${req.params.hotelId}`
+            });
+        }
+
+        // Validate startDate and endDate are present
+        const { startDate, endDate } = req.body;
+
+        if (!startDate || !endDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide both startDate and endDate'
+            });
+        }
+
+        // Validate endDate is the same as or after startDate
+        if (new Date(endDate) < new Date(startDate)) {
+            return res.status(400).json({
+                success: false,
+                message: 'End date must be the same as or after start date'
+            });
+        }
+
+        // Add user Id to req.body
+        req.body.user = req.user.id;
+
+        // Check for existed bookings
+        const existedBookings = await Booking.find({ user: req.user.id });
+
+        // If the user is not an admin, they can only create 3 bookings.
+        if (existedBookings.length >= 3 && req.user.role !== 'admin') {
+            return res.status(400).json({
+                success: false,
+                message: `The user with ID ${req.user.id} has already made 3 bookings`
+            });
+        }
+
+        const booking = await Booking.create(req.body);
+
+        res.status(200).json({
+            success: true,
+            data: booking
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Cannot create Booking"
+        });
+    }
+};
+
+exports.updateBooking = async (req, res, next) => {
+    try {
+        let booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: `No booking with the id of ${req.params.id}`
+            });
+        }
+
+        if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(401).json({
+                success: false,
+                message: `User ${req.user.id} is not authorized to update this booking`
+            });
+        }
+
+        // If either date is being updated, re-validate the range
+        const startDate = req.body.startDate ? new Date(req.body.startDate) : booking.startDate;
+        const endDate = req.body.endDate ? new Date(req.body.endDate) : booking.endDate;
+
+        if (endDate < startDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'End date must be the same as or after start date'
+            });
+        }
+
+        booking = await Booking.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            {
+                new: true,
+                runValidators: true
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            data: booking
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Cannot update Booking"
+        });
+    }
+};
+
+exports.deleteBooking = async (req, res, next) => {
+    try {
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({
+                success: false,
+                message: `No booking with the id of ${req.params.id}`
+            });
+        }
+
+        // Make sure user is the booking owner
+        if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
+            return res.status(401).json({
+                success: false,
+                message: `User ${req.user.id} is not authorized to delete this booking`
+            });
+        }
+
+        await booking.deleteOne();
+
+        res.status(200).json({
+            success: true,
+            data: {}
+        });
+
+    } catch (error) {
+        console.log(error);
+        return res.status(500).json({
+            success: false,
+            message: "Cannot delete Booking"
+        });
+    }
+};
+</file>
+
+<file path="controllers/hotels.js">
+const Hotel = require('../models/Hotel');
+const Booking = require('../models/Booking');
+
+exports.getHotels = async (req,res,next) => {
+    try {
+        let query;
+
+        //copy req.query
+        const reqQuery = {...req.query};
+
+        //fields to exclude
+        const removeFields = ['select','sort'];
+        removeFields.forEach(param => delete reqQuery[param]);
+        console.log(reqQuery);
+
+        //create query string
+        let queryStr = JSON.stringify(reqQuery);
+        queryStr = queryStr.replace(/\b(gt|gte|lt|lte|in)\b/g, match => `$${match}`);
+
+        query = Hotel.find(JSON.parse(queryStr)).populate('bookings');
+
+        //select fields
+        if(req.query.select){
+            const fields = req.query.select.split(',').join(' ');
+            query = query.select(fields);
+        }
+
+        //sort
+        if(req.query.sort){
+            const sortBy = req.query.sort.split(',').join(' ');
+            query = query.sort(sortBy);
+        } else {
+            query = query.sort('-createdAt');
+        }
+
+        //pagination
+        const page = parseInt(req.query.page,10) || 1;
+        const limit = parseInt(req.query.limit,10) || 25;
+        const startIndex = (page-1)*limit;
+        const endIndex = page*limit;
+        const total = await Hotel.countDocuments();
+
+        query = query.skip(startIndex).limit(limit);
+
+        //executing query
+        const hotels = await query;
+
+        //pagination result
+        const pagination = {};
+
+        if(endIndex < total){
+            pagination.next = {
+                page:page+1,
+                limit
+            }
+        }
+
+        if(startIndex > 0){
+            pagination.prev = {
+                page:page-1,
+                limit
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            count: hotels.length,
+            pagination,
+            data: hotels
+        });
+
+    } catch (err) {
+        res.status(400).json({success: false});
+    }
+};
+
+exports.getHotel = async (req,res,next) => {
+    try {
+        const hotel = await Hotel.findById(req.params.id);
+
+        if(!hotel) {
+            return res.status(400).json({success:false});
+        }
+
+        res.status(200).json({success:true, data:hotel});
+
+    } catch (err) {
+        res.status(400).json({success:false});
+    }
+};
+
+exports.createHotel = async (req,res,next) => {
+    const hotel = await Hotel.create(req.body);
+    res.status(201).json({
+        success:true,
+        data: hotel
+    });
+};
+
+exports.updateHotel = async (req,res,next) => {
+    try {
+        const hotel = await Hotel.findByIdAndUpdate(req.params.id, req.body, {
+            new: true,
+            runValidators: true
+        });
+
+        if(!hotel){
+            return res.status(400).json({success:false});
+        }
+
+        res.status(200).json({success:true, data:hotel});
+
+    } catch (err) {
+        res.status(400).json({success:false});
+    }
+};
+
+exports.deleteHotel = async (req,res,next) => {
+    try {
+        const hotel = await Hotel.findByIdAndDelete(req.params.id);
+
+        if(!hotel){
+            return res.status(400).json({success:false, message: `Hotel not found with id of ${req.params.id}`});
+        }
+
+        await Booking.deleteMany({hotel: req.params.id});
+        await Hotel.deleteOne({_id: req.params.id});
+
+        res.status(200).json({success:true, data:{}});
+
+    } catch (err) {
+        res.status(400).json({success:false});
+    }
+};
+</file>
+
+<file path="middleware/auth.js">
+const jwt = require('jsonwebtoken');
+const User = require('../models/User');
+
+//protect routes
+exports.protect = async (req,res,next) => {
+    let token;
+
+    if(req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+        token = req.headers.authorization.split(' ')[1];
+    }
+
+    //make sure token exists
+    if(!token) {
+        return res.status(400).json({
+            success:false,
+            message:'Not authorize to access this route'
+        });
+    }
+
+    try {
+        //verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        console.log(decoded);
+
+        req.user = await User.findById(decoded.id);
+
+        next();
+    } catch(err){
+        console.log(err.stack);
+        return res.status(400).json({
+            success:false,
+            message: 'Not authorize to access this route'
+        });
+    }
+};
+
+exports.authorize = (...roles) => {
+    return (req,res,next) => {
+        if(!roles.includes(req.user.role)){
+            return res.status(403).json({
+                success:false,
+                message: `User role ${req.user.role} is not authorized to access this route`
+            });
+        }
+        next();
+    }
+};
+</file>
+
+<file path="models/Booking.js">
+const mongoose = require('mongoose');
+ 
+const BookingSchema = new mongoose.Schema({
+    startDate: {
+        type: Date,
+        required: true
+    },
+    endDate: {
+        type: Date,
+        required: true,
+        validate: {
+            validator: function (value) {
+                return value >= this.startDate;
+            },
+            message: 'End date must be the same as or after start date'
+        }
+    },
+    user: {
+        type: mongoose.Schema.ObjectId,
+        ref: 'User',
+        required: true
+    },
+    hotel: {
+        type: mongoose.Schema.ObjectId,
+        ref: 'Hotel',
+        required: true
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+ 
+module.exports = mongoose.model('Booking', BookingSchema);
+</file>
+
+<file path="routes/bookings.js">
+const express = require('express');
+
+const {
+  getBookings,
+  getBooking,
+  addBooking,
+  updateBooking,
+  deleteBooking
+} = require('../controllers/bookings');
+
+const router = express.Router({ mergeParams: true });
+
+const { protect, authorize } = require('../middleware/auth');
+
+router.route('/')
+  .get(protect, getBookings)
+  .post(protect, authorize('admin', 'user'), addBooking);
+
+router.route('/:id')
+  .get(protect, getBooking)
+  .put(protect, authorize('admin', 'user'), updateBooking)
+  .delete(protect, authorize('admin', 'user'), deleteBooking);
+
+module.exports = router;
+</file>
+
+<file path="routes/hotels.js">
+const express = require('express');
+const {getHotels, getHotel, createHotel, updateHotel, deleteHotel} = require('../controllers/hotels');
+
+// include other resource routers
+const bookingRouter = require('./bookings');
+const router = express.Router();
+
+const {protect,authorize} = require('../middleware/auth');
+
+// re-route into other resource routers
+router.use('/:hotelId/bookings', bookingRouter);
+
+router.route('/').get(getHotels).post(protect,authorize('admin'),createHotel);
+router.route('/:id').get(getHotel).put(protect,authorize('admin'),updateHotel).delete(protect,authorize('admin'),deleteHotel);
+
+module.exports = router;
+</file>
+
+<file path=".gitignore">
+# ignore all node_modules
+node_modules/*
+# ignore config file
+config/config.env
+</file>
+
+<file path="README.md">
+[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/iG82Gnyy)
+</file>
+
+<file path="models/Hotel.js">
+const mongoose = require('mongoose');
+
+const HotelSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true,'Please add a name'],
+        unique: true,
+        trim: true,
+        maxlength:[50,'Name can not be more than 50 characters']
+    },
+    address:{
+        type: String,
+        required: [true,'Please add an address']
+    },
+    tel:{
+        type: String
+    }
+    
+},
+{
+    toJSON: {virtuals: true},
+    toObject: {virtuals: true}
+});
+
+//reverse populate with virtuals
+HotelSchema.virtual('bookings',{
+    ref: 'Booking',
+    localField: '_id',
+    foreignField: 'hotel',
+    justOne: false
+});
+
+module.exports = mongoose.model('Hotel',HotelSchema);
+</file>
+
+<file path="models/User.js">
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const UserSchema = new mongoose.Schema({
+    name:{
+        type: String,
+        required: [true, 'Please add a name']
+    },
+    tel:{
+        type: String,
+        required: [true, 'Please add a telephone number']
+    },
+    email:{
+        type: String,
+        required: [true,'Please add an email'],
+        unique: true,
+        match: [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+,'Please add a valid email']
+    },
+    role: {
+        type: String,
+        enum: ['user','admin'],
+        default: 'user'
+    },
+    password: {
+        type: String,
+        required: [true,'Please add a password'],
+        minlength: 6,
+        select: false
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+// encrypt password using bcrypt
+UserSchema.pre('save', async function(next) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password,salt);
+});
+
+//sign jwt and return
+UserSchema.methods.getSignedJwtToken = function(){
+    return jwt.sign({id:this._id}, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE
+    });
+};
+
+//match user entered pw to hashed pw in db
+UserSchema.methods.matchPassword = async function(enteredPassword){
+    return await bcrypt.compare(enteredPassword, this.password);
+};
+
+module.exports = mongoose.model('User', UserSchema);
+</file>
+
+<file path="routes/auth.js">
+const express = require('express');
+
+const {register, login, getMe, logout} = require('../controllers/auth');
+
+const router = express.Router();
+
+const {protect} = require('../middleware/auth');
+
+router.post('/register',register);
+router.post('/login',login);
+router.get('/me',protect,getMe);
+router.get('/logout',logout);
+
+module.exports = router;
+</file>
+
+<file path="package.json">
+{
+  "name": "backend-project-i3ffmpreg",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.2.1"
+  },
+  "devDependencies": {
+    "newman": "^6.2.2",
+    "nodemon": "^3.1.11"
+  }
+}
+</file>
+
+<file path="server.js">
+const express = require('express');
+const dotenv = require('dotenv');
+const cookieParser = require('cookie-parser');
+const connectDB = require('./config/db');
+
+// load env vars
+dotenv.config({path:'./config/config.env'});
+
+//connect to db
+connectDB();
+
+// route files
+const hotels = require('./routes/hotels');
+const auth = require('./routes/auth');
+const bookings = require('./routes/bookings');
+
+const app = express();
+
+//body parser
+app.use(express.json());
+
+//cookie parser
+app.use(cookieParser());
+
+//extended query parser
+app.set('query parser', 'extended');
+
+ //mount routers
+app.use('/api/v1/hotels', hotels);
+app.use('/api/v1/auth', auth);
+app.use('/api/v1/bookings', bookings);
+
+const PORT = process.env.PORT || 5000;
+const server = app.listen(PORT, console.log('Server running in ', process.env.NODE_ENV, ' mode on port ', PORT));
+
+//handle unhandled promise rejections
+process.on('unhandledRejection', (err,promise) => {
+    console.log(`Error: ${err.message}`);
+    server.close(() => process.exit(1));
+});
+</file>
+
+<file path="controllers/auth.js">
+const User = require('../models/User');
+
+//get token from model, create cookie and send response
+const sendTokenResponse = (user, statusCode, res) => {
+    //create token
+    const token = user.getSignedJwtToken();
+
+    const options = {
+        expires: new Date(Date.now()+process.env.JWT_COOKIE_EXPIRE*24*60*60*1000),
+        httpOnly: true
+    };
+
+    if(process.env.NODE_ENV === 'production'){
+        options.secure = true;
+    }
+
+    res.status(statusCode).cookie('token',token,options).json({
+        success: true,
+        token
+    });
+}
+
+// @desc     Register user
+// @route    POST /api/v1/auth/register
+// @access   Public
+exports.register = async (req,res,next) => {
+    try {
+        const {name, tel, email, password, role} = req.body;
+
+        //create user
+        const user = await User.create({
+            name,
+            tel,
+            email,
+            password,
+            role
+        });
+
+        //create token
+        //const token = user.getSignedJwtToken();
+        //res.status(200).json({success:true, token});
+        sendTokenResponse(user,200,res);
+    } catch (err){
+        res.status(400).json({success:false});
+        console.log(err.stack);
+    }
+};
+
+// @desc     Login user
+// @route    POST /api/v1/auath/login
+// @access   Public
+exports.login = async (req,res,next) => {
+        const {email, password} = req.body;
+
+        //validate email & pw
+        if(!email || !password){
+            return res.status(400).json({
+                success: false,
+                msg: 'Please provide an email and password'
+            });
+        }
+
+        //check for user
+        const user = await User.findOne({email}).select('+password');
+
+        if(!user){
+            return res.status(400).json({
+                success:false,
+                msg:'Invalid credentials'
+            });
+        }
+
+        //check if pw matched
+        const isMatch = await user.matchPassword(password);
+
+        if(!isMatch){
+            return res.status(400).json({
+                success:false,
+                msg:'Invalid credentials'
+            });
+        }
+
+        //create token
+        //const token = user.getSignedJwtToken();
+        //res.status(200).json({success:true,token});
+        sendTokenResponse(user,200,res);
+};
+
+// @desc     Get current Logged in user
+// @route    POST /api/v1/auth/me
+// @access   Private
+exports.getMe = async (req,res,next) => {
+    const user = await User.findById(req.user.id);
+    res.status(200).json({
+        success: true,
+        data: user
+    });
+};
+
+// @desc     Log user out / clear cookie
+// @route    GET /api/v1/auath/logout
+// @access   Private
+exports.logout = async (req,res,next) => {
+    res.cookie('token','none',{
+        expires: new Date(Date.now()+10*1000),
+        httpOnly: true
+    });
+
+    res.status(200).json({
+        success:true,
+        data:{}
+    });
+};
+</file>
+
+</files>
