@@ -17,6 +17,12 @@ const bookings = require('./routes/bookings');
 
 const app = express();
 
+app.use(cors({
+    origin: '*',
+    credentials: true
+}));
+
+
 //body parser
 app.use(express.json());
 
