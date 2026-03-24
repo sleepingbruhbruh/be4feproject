@@ -144,7 +144,7 @@ exports.updateBooking = async (req, res, next) => {
       });
     }
 
-    await Booking.findOneAndUpdate(id, req.body, {
+    await Booking.findOneAndUpdate({ _id: req.params.id }, req.body, {
       runValidators: true,
       context: "query", // ← this makes `this` inside validators be the Query object
       returnDocument: "after", // also fixes the deprecation warning you're seeing
