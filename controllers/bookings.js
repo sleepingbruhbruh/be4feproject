@@ -9,17 +9,17 @@ exports.getBookings = async (req, res, next) => {
 
   if (req.user.role !== "admin") {
     query = Booking.find({ user: req.user.id })
-      .populate({ path: "hotel", select: "name address tel" })
+      .populate({ path: "hotel", select: "name address tel picture" })
       .populate({ path: "user", select: "name email tel" });
   } else {
     if (req.params.hotelId) {
       console.log(req.params.hotelId);
       query = Booking.find({ hotel: req.params.hotelId })
-        .populate({ path: "hotel", select: "name address tel" })
+        .populate({ path: "hotel", select: "name address tel picture" })
         .populate({ path: "user", select: "name email tel" });
     } else {
       query = Booking.find()
-        .populate({ path: "hotel", select: "name address tel" })
+        .populate({ path: "hotel", select: "name address tel picture" })
         .populate({ path: "user", select: "name email tel" }); // ← add this
     }
   }
@@ -44,7 +44,7 @@ exports.getBooking = async (req, res, next) => {
   try {
     const booking = await Booking.findById(req.params.id).populate({
       path: "hotel",
-      select: "name address tel",
+      select: "name address tel picture",
     });
 
     if (!booking) {
