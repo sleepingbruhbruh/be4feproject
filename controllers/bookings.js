@@ -83,11 +83,9 @@ exports.addBooking = async (req, res, next) => {
             });
         }
 
-        // ... existing validation logic ...
 
         req.body.user = req.user.id;
 
-        // Check for existing bookings
         const existedBookings = await Booking.find({ user: req.user.id });
 
         if (existedBookings.length >= 3 && req.user.role !== 'admin') {
