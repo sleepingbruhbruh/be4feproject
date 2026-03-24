@@ -40,10 +40,13 @@ exports.register = async (req,res,next) => {
         //const token = user.getSignedJwtToken();
         //res.status(200).json({success:true, token});
         sendTokenResponse(user,200,res);
-    } catch (err){
-        res.status(400).json({success:false});
-        console.log(err.stack);
+    } catch (err) {
+    console.log(err.stack);
+    if (err.code === 11000) {
+        return res.status(400).json({ success: false, message: 'Email already in use' });
     }
+    res.status(400).json({ success: false, message: err.message || 'Registration failed' });
+}
 };
 
 // @desc     Login user
